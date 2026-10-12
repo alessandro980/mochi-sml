@@ -1,0 +1,34 @@
+{
+ "name": "Mochi SML – Santa Maria di Lourdes Milano",
+ "short_name": "Mochi SML",
+ "start_url": "./index.html",
+ "display": "standalone",
+ "background_color": "#fffaf0",
+ "theme_color": "#6b1d2a",
+ "lang": "it",
+ "icons": [
+  {
+   "src": "icon-192.png",
+   "sizes": "192x192",
+   "type": "image/png"
+  },
+  {
+   "src": "icon-512.png",
+   "sizes": "512x512",
+   "type": "image/png"
+  },
+  {
+   "src": "icon-maskable-512.png",
+   "sizes": "512x512",
+   "type": "image/png",
+   "purpose": "maskable"
+  },
+  {
+   "src": "icon.svg",
+   "sizes": "any",
+   "type": "image/svg+xml"
+  }
+ ],
+ "scope": "./",
+ "id": "./"
+}
