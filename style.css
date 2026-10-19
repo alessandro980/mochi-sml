@@ -24,3 +24,9 @@ button.yes{background:#2e6b3a}button.no{background:#f6d5da;color:#b00020}
 #chf{display:flex;gap:6px;padding:8px}#chf input{margin:0}.ch-n{padding:0 10px 8px;color:#777;font-size:.7rem}
 #chips{display:flex;gap:6px;overflow-x:auto;padding:6px 8px 0}.chip{flex:none;border:1px solid var(--o);background:#fff8e1;border-radius:16px;padding:5px 10px;font-size:.8rem}
 .ch-h span button{margin-left:6px}.msg a.go{color:var(--r);font-weight:700}
+.cerbtn{display:block;width:100%;margin-top:10px;border:0;background:linear-gradient(90deg,#6b1d2a,#8a2c3d);color:#fff;font-size:1.05rem}.cerbtn small{opacity:.8}
+.cerline{margin:4px 0;color:#6b1d2a}.badge.cer{background:#f3e3b0;color:#6b1d2a}
+.note{background:#fff8e1;border-radius:8px;padding:6px 8px;margin:6px 0;font-size:.9rem}
+.prog{height:8px;background:#eee;border-radius:4px;overflow:hidden;margin-top:6px}.prog i{display:block;height:100%;background:var(--g)}
+.chk{display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-bottom:1px solid #f2f2f2}.chk label{font-size:.95rem;font-weight:400}.chk a{color:#b00020;text-decoration:none;padding:0 6px}
+h4{margin:.8em 0 .2em;color:var(--r)}
