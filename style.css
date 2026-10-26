@@ -30,3 +30,5 @@ button.yes{background:#2e6b3a}button.no{background:#f6d5da;color:#b00020}
 .prog{height:8px;background:#eee;border-radius:4px;overflow:hidden;margin-top:6px}.prog i{display:block;height:100%;background:var(--g)}
 .chk{display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-bottom:1px solid #f2f2f2}.chk label{font-size:.95rem;font-weight:400}.chk a{color:#b00020;text-decoration:none;padding:0 6px}
 h4{margin:.8em 0 .2em;color:var(--r)}
+.sqbar{display:flex;gap:6px;overflow-x:auto;padding:8px 0}.sqf{flex:none;border:2px solid transparent;border-radius:16px;padding:5px 12px;font-weight:700;background:#eee}.sqf.on{border-color:#222;box-shadow:0 0 0 2px #fff inset}
+.badge.sq{font-weight:700}.badge.uff{background:#e3f1e5;color:#2e6b3a}

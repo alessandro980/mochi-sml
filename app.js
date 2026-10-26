@@ -33,7 +33,20 @@ function migrate(d){d.servers.forEach(s=>{s.nonDisp=s.nonDisp||[];if(s.cer===und
  if(!d.v||d.v<2){d.v=2;const ex=d.servers.find(s=>/^Marco \(esempio\)/.test(s.nome));if(ex&&!d.servers.some(s=>s.cer)){ex.cer=true;ex.esperienza='3 anni di servizio (esempio)';const ns=upcomingOf(d).find(m=>m.tipo!=='feriale');if(ns&&!ns.cer.primo&&!Object.values(ns.assign).includes(ex.id)){ns.cer.primo=ex.id;ns.noteServ='Ritrovo in sacrestia alle 9:40. Ceroferari: accompagnate il Vangelo! (esempio)'}}}
  return d}
 function upcomingOf(d){return d.masses.filter(m=>m.data>=iso(new Date())).sort((a,b)=>(a.data+a.ora).localeCompare(b.data+b.ora))}
-D=migrate(D);
+// --- squadre e calendari ufficiali ---
+const SQ={blu:{n:'Blu',c:'#1e9be0',t:'#fff'},gialli:{n:'Gialli',c:'#f5d90a',t:'#222'},rossi:{n:'Rossi',c:'#d62828',t:'#fff'},verdi:{n:'Verdi',c:'#7cc142',t:'#163'}};
+const sqBadge=k=>SQ[k]?`<span class="badge sq" style="background:${SQ[k].c};color:${SQ[k].t}">Squadra ${SQ[k].n}</span>`:'';
+function mergeOfficial(d){const S=window.OFFICIAL_SCHEDULES||[];d.uffDeleted=d.uffDeleted||[];d.postsDeleted=d.postsDeleted||[];
+ for(const sch of S){for(const x of sch.messe){const key=x.data+' '+x.ora;if(d.uffDeleted.includes(key))continue;
+   let m=d.masses.find(m=>m.data===x.data&&m.ora===x.ora);
+   if(m&&!m.uff&&/esempio/i.test(m.note||'')){d.masses=d.masses.filter(y=>y!==m);m=null}
+   if(m){if(!m.uff||m.uffSrc!==sch.id){m.uff=true;m.uffSrc=sch.id;if(!m.squadra)m.squadra=x.squadra;m.tipo=x.tipo||m.tipo;if(!m.note)m.note=x.note||''}}
+   else d.masses.push({id:'uff-'+x.data+'-'+x.ora.replace(':',''),data:x.data,ora:x.ora,tipo:x.tipo||'festiva',note:x.note||'',squadra:x.squadra,uff:true,uffSrc:sch.id,assign:{},presenti:[],cer:{primo:'',secondo:''},check:null,noteServ:''})}
+  for(const a of sch.avvisi||[]){if(!d.posts.some(p=>p.id===a.id)&&!d.postsDeleted.includes(a.id))d.posts.push({...a,uff:true})}}
+ return d}
+D=migrate(D);D=mergeOfficial(D);
+const inSquad=(m,s)=>!!(s&&s.squadra&&m.squadra===s.squadra);
+const myLabel=(m,s)=>roleOf(m,s.id)||(inSquad(m,s)?'Squadra '+SQ[s.squadra].n:'');
 const svcIds=m=>[...Object.values(m.assign),m.cer.primo,m.cer.secondo].filter(Boolean);
 const roleOf=(m,id)=>m.cer.primo===id?'1° Cerimoniere':m.cer.secondo===id?'2° Cerimoniere':Object.keys(m.assign).find(r=>m.assign[r]===id);
 const BONUS_CER=1;
@@ -57,10 +70,10 @@ window.login=()=>{if($('#pin').value===D.pin){admin=true;close();render()}else a
 window.close=close;
 const upcoming=()=>D.masses.filter(m=>m.data>=iso(new Date())).sort((a,b)=>(a.data+a.ora).localeCompare(b.data+b.ora));
 const V={};
-V.home=()=>{const u=upcoming(),me=D.me&&sv(D.me);const mine=me?u.filter(m=>svcIds(m).includes(me.id)):[];
+V.home=()=>{const u=upcoming(),me=D.me&&sv(D.me);const mine=me?u.filter(m=>svcIds(m).includes(me.id)||inSquad(m,me)):[];
  return `<h2>Pace e bene! 🙏</h2>
  <div class="card"><label>Chi sei?</label><select onchange="D.me=this.value||null;save();render()"><option value="">— scegli il tuo nome —</option>${D.servers.map(s=>`<option value="${s.id}" ${s.id===D.me?'selected':''}>${esc(s.nome)}</option>`).join('')}</select>
- ${me?(mine.length?'<b>I tuoi prossimi servizi:</b>'+mine.map(m=>`<div>${fmt(m.data)} ${m.ora} – ${esc(roleOf(m,me.id))}</div>`).join(''):'<div>Nessun servizio in programma.</div>'):''}</div>
+ ${me&&me.squadra?'<div>La tua squadra: '+sqBadge(me.squadra)+'</div>':''}${me?(mine.length?'<b>I tuoi prossimi servizi:</b>'+mine.map(m=>`<div>${fmt(m.data)} ${m.ora} – ${esc(myLabel(m,me))}</div>`).join(''):'<div>Nessun servizio in programma.</div>'):''}</div>
  <div class="grid"><div class="tile"><b>${u.length}</b>Messe in programma</div><div class="tile"><b>${D.servers.length}</b>Chierichetti</div></div>
  <button class="tile cerbtn" onclick="tab='cer';render()">🎗️ Area Cerimonieri <small>(${D.servers.filter(s=>s.cer).length})</small></button>
  ${u[0]?`<h3>Prossima Messa</h3>`+massCard(u[0]):''}
@@ -70,18 +83,23 @@ function conflicts(m){const e=Object.entries(m.assign);if(m.cer.primo)e.push(['1
  .concat(dupes(m))}
 function dupes(m){const c={};svcIds(m).forEach(id=>c[id]=(c[id]||0)+1);return Object.keys(c).filter(k=>c[k]>1).map(k=>`${nm(k)} ha più ruoli`)}
 function massCard(m){const cf=conflicts(m);
- return `<div class="card ${m.tipo}"><b>${fmt(m.data)} · ${m.ora}</b> <span class="badge">${TIPI[m.tipo]}</span>${/esempio/i.test(m.note)?'<span class="badge es">esempio</span>':''}<div><small>${esc(m.note)}</small></div>
- ${m.cer.primo||m.cer.secondo?`<div class="cerline">🎗️ ${m.cer.primo?'1° Cerimoniere: <b>'+esc(nm(m.cer.primo))+'</b>':''}${m.cer.secondo?' · 2°: <b>'+esc(nm(m.cer.secondo))+'</b>':''}</div>`:''}<div>${Object.entries(m.assign).map(([r,id])=>`<span class="badge">${esc(r)}: ${esc(nm(id))}</span>`).join('')||'<small>Nessuno assegnato</small>'}</div>
+ return `<div class="card ${m.tipo}"><b>${fmt(m.data)} · ${m.ora}</b> <span class="badge">${TIPI[m.tipo]}</span>${sqBadge(m.squadra)}${m.uff?'<span class="badge uff">✔ ufficiale</span>':''}${/esempio/i.test(m.note)?'<span class="badge es">esempio</span>':''}<div><small>${esc(m.note)}</small></div>
+ ${m.cer.primo||m.cer.secondo?`<div class="cerline">🎗️ ${m.cer.primo?'1° Cerimoniere: <b>'+esc(nm(m.cer.primo))+'</b>':''}${m.cer.secondo?' · 2°: <b>'+esc(nm(m.cer.secondo))+'</b>':''}</div>`:''}<div>${Object.entries(m.assign).map(([r,id])=>`<span class="badge">${esc(r)}: ${esc(nm(id))}</span>`).join('')||(m.squadra?'<small>Serve tutta la squadra '+SQ[m.squadra].n+'</small>':'<small>Nessuno assegnato</small>')}</div>
  ${m.noteServ?`<div class="note">📝 <b>Dal cerimoniere:</b> ${esc(m.noteServ)}</div>`:''}${cf.map(c=>`<div class="warn">⚠️ ${esc(c)}</div>`).join('')}
  ${admin?`<button class="s" onclick="editMass('${m.id}')">✏️ Modifica / assegna</button><button class="s" onclick="attend('${m.id}')">✅ Presenze</button>`:''}</div>`}
-V.turni=()=>`<h2>Turni delle Messe</h2>${admin?`<button class="p" onclick="editMass()">+ Nuova Messa</button>`:''}${upcoming().map(massCard).join('')||'<p>Nessuna Messa in programma.</p>'}
- <details><summary>Messe passate</summary>${D.masses.filter(m=>m.data<iso(new Date())).sort((a,b)=>b.data.localeCompare(a.data)).map(massCard).join('')}</details>`;
+window._sq=window._sq||'';
+V.turni=()=>{const f=_sq,u=upcoming().filter(m=>!f||m.squadra===f);const mem=f?D.servers.filter(s=>s.squadra===f):[];
+ return `<h2>Turni delle Messe</h2>${admin?`<button class="p" onclick="editMass()">+ Nuova Messa</button><button class="s" onclick="addMonth()">📅 Aggiungi mese</button>`:''}
+ <div class="sqbar"><button class="sqf ${f?'':'on'}" onclick="_sq='';render()">Tutte</button>${Object.entries(SQ).map(([k,v])=>`<button class="sqf ${f===k?'on':''}" style="background:${v.c};color:${v.t}" onclick="_sq='${k}';render()">${v.n}</button>`).join('')}</div>
+ ${f?`<div class="card" style="border-left-color:${SQ[f].c}"><b>Squadra ${SQ[f].n}</b> · ${u.length} Messe in programma<br><small>${mem.length?'Membri: '+mem.map(s=>esc(s.nome)).join(', '):'Nessun membro assegnato (il responsabile li imposta nell\'elenco).'}</small></div>`:''}
+ ${u.map(massCard).join('')||'<p>Nessuna Messa in programma.</p>'}
+ <details><summary>Messe passate</summary>${D.masses.filter(m=>m.data<iso(new Date())).sort((a,b)=>b.data.localeCompare(a.data)).map(massCard).join('')}</details>`};
 window.editMass=id=>{const m=id?D.masses.find(x=>x.id===id):{id:uid(),data:addDays(1),ora:'10:00',tipo:'festiva',note:'',assign:{},presenti:[],cer:{primo:'',secondo:''},check:null,noteServ:'',nuova:1};
  window._m=JSON.parse(JSON.stringify(m));drawMass()};
 function drawMass(){const m=_m;
  modal(`<h2>${m.nuova?'Nuova':'Modifica'} Messa</h2><div class="row"><div><label>Data</label><input type="date" value="${m.data}" onchange="_m.data=this.value;drawMass()"></div><div><label>Ora</label><input type="time" value="${m.ora}" onchange="_m.ora=this.value"></div></div>
  <label>Tipo</label><select onchange="_m.tipo=this.value">${Object.entries(TIPI).map(([k,v])=>`<option value="${k}" ${k===m.tipo?'selected':''}>${v}</option>`).join('')}</select>
- <label>Note</label><input value="${esc(m.note)}" onchange="_m.note=this.value">
+ <label>Note</label><input value="${esc(m.note)}" onchange="_m.note=this.value"><label>Squadra di turno</label><select onchange="_m.squadra=this.value;drawMass()"><option value="">— nessuna —</option>${Object.entries(SQ).map(([k,v])=>`<option value="${k}" ${m.squadra===k?'selected':''}>${v.n}</option>`).join('')}</select>
  <h3>🎗️ Cerimonieri</h3>${['primo','secondo'].map(k=>`<label>${k==='primo'?'1° Cerimoniere':'2° Cerimoniere (facoltativo)'}</label><select onchange="_m.cer.${k}=this.value;drawMass()"><option value="">—</option>${D.servers.filter(s=>s.cer).map(s=>`<option value="${s.id}" ${m.cer[k]===s.id?'selected':''}>${esc(s.nome)}${s.nonDisp.includes(m.data)?' ⚠️ non disp.':''}</option>`).join('')}</select>`).join('')}${D.servers.some(s=>s.cer)?'':'<small>Nessun cerimoniere: segnalo nell\'elenco chierichetti.</small>'}
  <h3>Ruoli</h3>${ROLES.map(r=>`<label>${r}</label><select onchange="if(this.value)_m.assign['${r}']=this.value;else delete _m.assign['${r}'];drawMass()"><option value="">—</option>${D.servers.map(s=>`<option value="${s.id}" ${m.assign[r]===s.id?'selected':''}>${esc(s.nome)}${s.nonDisp.includes(m.data)?' ⚠️ non disp.':''}</option>`).join('')}</select>`).join('')}
  ${conflicts(m).map(c=>`<div class="warn">⚠️ ${esc(c)}</div>`).join('')}
@@ -93,7 +111,7 @@ window.suggest=()=>{const m=_m,cnt={},ccnt={};D.servers.forEach(s=>{cnt[s.id]=0;
  const pool=D.servers.filter(s=>!s.nonDisp.includes(m.data)).sort((a,b)=>cnt[a.id]-cnt[b.id]||Math.random()-.5);
  const keep={};for(const r in m.assign){const s=sv(m.assign[r]);if(s&&!s.nonDisp.includes(m.data))keep[r]=m.assign[r]}m.assign=keep;const used=new Set([...Object.values(keep),m.cer.primo,m.cer.secondo].filter(Boolean));const free=pool.filter(s=>!used.has(s.id));ROLES.slice(0,n).forEach(r=>{if(!m.assign[r]&&free.length)m.assign[r]=free.shift().id});drawMass()};
 window.saveMass=()=>{const m=_m;delete m.nuova;const i=D.masses.findIndex(x=>x.id===m.id);i<0?D.masses.push(m):D.masses[i]=m;save();close();render()};
-window.delMass=()=>{if(confirm('Eliminare questa Messa?')){D.masses=D.masses.filter(x=>x.id!==_m.id);save();close();render()}};
+window.delMass=()=>{if(confirm('Eliminare questa Messa?')){if(_m.uff){D.uffDeleted=D.uffDeleted||[];D.uffDeleted.push(_m.data+' '+_m.ora)}D.masses=D.masses.filter(x=>x.id!==_m.id);save();close();render()}};
 window.attend=id=>{const m=D.masses.find(x=>x.id===id);
  modal(`<h2>Presenze ${fmt(m.data)}</h2><p>Punti per questa Messa: ${PUNTI[m.tipo]}</p>${D.servers.map(s=>`<label style="display:block;font-size:1rem"><input type="checkbox" style="width:auto" ${m.presenti.includes(s.id)?'checked':''} onchange="tog('${id}','${s.id}',this.checked)"> ${esc(s.nome)} ${svcIds(m).includes(s.id)?'<span class=badge>'+esc(roleOf(m,s.id))+'</span>':''}</label>`).join('')}<button class="p" onclick="close();render()">Fatto</button>`)};
 window.tog=(mid,sid,on)=>{const m=D.masses.find(x=>x.id===mid);m.presenti=m.presenti.filter(x=>x!==sid);if(on)m.presenti.push(sid);save()};
@@ -112,10 +130,13 @@ V.avvisi=()=>`<h2>Avvisi</h2>${admin?`<button class="p" onclick="editPost()">+ N
 window.editPost=id=>{const p=id?D.posts.find(x=>x.id===id):{titolo:'',testo:'',data:iso(new Date()),pin:false};
  modal(`<h2>Avviso</h2><label>Titolo</label><input id="pt" value="${esc(p.titolo)}"><label>Testo</label><textarea id="px" rows="5">${esc(p.testo)}</textarea><label>Data</label><input id="pd" type="date" value="${p.data}"><label><input id="pp" type="checkbox" style="width:auto" ${p.pin?'checked':''}> In evidenza</label><br><button class="p" onclick="savePost('${id||''}')">Salva</button><button class="s" onclick="close()">Annulla</button>`)};
 window.savePost=id=>{const o={id:id||uid(),titolo:$('#pt').value||'Senza titolo',testo:$('#px').value,data:$('#pd').value,pin:$('#pp').checked};const i=D.posts.findIndex(x=>x.id===id);i<0?D.posts.push(o):D.posts[i]=o;save();close();render()};
-window.delPost=id=>{if(confirm('Eliminare?')){D.posts=D.posts.filter(x=>x.id!==id);save();render()}};
-V.roster=()=>admin?`<h2>Chierichetti e cerimonieri</h2><button class="p" onclick="editSrv()">+ Aggiungi</button>${D.servers.map(s=>`<div class="card"><b>${esc(s.nome)}</b> · ${s.eta||'?'} anni ${s.cer?'<span class="badge cer">🎗️ Cerimoniere</span>':''}${s.esperienza?'<br><small>⭐ '+esc(s.esperienza)+'</small>':''}<br><small>📞 ${esc(s.contatto)}</small><br><button class="s" onclick="editSrv('${s.id}')">✏️</button><button class="s" onclick="delSrv('${s.id}')">🗑</button></div>`).join('')}`:'<p>Solo per il responsabile.</p>';
-window.editSrv=id=>{const s=id?sv(id):{nome:'',eta:'',contatto:'',cer:false,esperienza:''};modal(`<h2>Chierichetto / cerimoniere</h2><label>Nome</label><input id="sn" value="${esc(s.nome)}"><label>Età</label><input id="se" type="number" value="${s.eta}"><label>Contatto (genitore o personale se maggiorenne)</label><input id="sc" value="${esc(s.contatto)}"><label style="display:block;font-size:1rem"><input id="scer" type="checkbox" style="width:auto" ${s.cer?'checked':''}> 🎗️ È cerimoniere</label><label>Esperienza (es. anni di servizio)</label><input id="sx" value="${esc(s.esperienza||'')}"><button class="p" onclick="saveSrv('${id||''}')">Salva</button><button class="s" onclick="close()">Annulla</button>`)};
-window.saveSrv=id=>{const s=id?sv(id):{id:uid(),nonDisp:[]};s.nome=$('#sn').value||'Senza nome';s.eta=+$('#se').value||'';s.contatto=$('#sc').value;s.cer=$('#scer').checked;s.esperienza=$('#sx').value;if(!s.cer)D.masses.forEach(m=>{if(m.cer.primo===s.id)m.cer.primo='';if(m.cer.secondo===s.id)m.cer.secondo=''});if(!id)D.servers.push(s);save();close();render()};
+window.delPost=id=>{if(confirm('Eliminare?')){D.postsDeleted=D.postsDeleted||[];D.postsDeleted.push(id);D.posts=D.posts.filter(x=>x.id!==id);save();render()}};
+window._rsq=window._rsq||'';
+V.roster=()=>admin?`<h2>Chierichetti e cerimonieri</h2><button class="p" onclick="editSrv()">+ Aggiungi</button>
+ <div class="sqbar"><button class="sqf ${_rsq?'':'on'}" onclick="_rsq='';render()">Tutti</button>${Object.entries(SQ).map(([k,v])=>`<button class="sqf ${_rsq===k?'on':''}" style="background:${v.c};color:${v.t}" onclick="_rsq='${k}';render()">${v.n} (${D.servers.filter(s=>s.squadra===k).length})</button>`).join('')}<button class="sqf ${_rsq==='-'?'on':''}" onclick="_rsq='-';render()">Senza</button></div>
+ ${D.servers.filter(s=>!_rsq||(_rsq==='-'?!s.squadra:s.squadra===_rsq)).map(s=>`<div class="card"><b>${esc(s.nome)}</b> · ${s.eta||'?'} anni ${sqBadge(s.squadra)} ${s.cer?'<span class="badge cer">🎗️ Cerimoniere</span>':''}${s.esperienza?'<br><small>⭐ '+esc(s.esperienza)+'</small>':''}<br><small>📞 ${esc(s.contatto)}</small><br><button class="s" onclick="editSrv('${s.id}')">✏️</button><button class="s" onclick="delSrv('${s.id}')">🗑</button></div>`).join('')}`:'<p>Solo per il responsabile.</p>';
+window.editSrv=id=>{const s=id?sv(id):{nome:'',eta:'',contatto:'',cer:false,esperienza:''};modal(`<h2>Chierichetto / cerimoniere</h2><label>Nome</label><input id="sn" value="${esc(s.nome)}"><label>Età</label><input id="se" type="number" value="${s.eta}"><label>Contatto (genitore o personale se maggiorenne)</label><input id="sc" value="${esc(s.contatto)}"><label>Squadra</label><select id="ssq"><option value="">— nessuna —</option>${Object.entries(SQ).map(([k,v])=>`<option value="${k}" ${s.squadra===k?'selected':''}>${v.n}</option>`).join('')}</select><label style="display:block;font-size:1rem"><input id="scer" type="checkbox" style="width:auto" ${s.cer?'checked':''}> 🎗️ È cerimoniere</label><label>Esperienza (es. anni di servizio)</label><input id="sx" value="${esc(s.esperienza||'')}"><button class="p" onclick="saveSrv('${id||''}')">Salva</button><button class="s" onclick="close()">Annulla</button>`)};
+window.saveSrv=id=>{const s=id?sv(id):{id:uid(),nonDisp:[]};s.nome=$('#sn').value||'Senza nome';s.eta=+$('#se').value||'';s.contatto=$('#sc').value;s.squadra=$('#ssq').value;s.cer=$('#scer').checked;s.esperienza=$('#sx').value;if(!s.cer)D.masses.forEach(m=>{if(m.cer.primo===s.id)m.cer.primo='';if(m.cer.secondo===s.id)m.cer.secondo=''});if(!id)D.servers.push(s);save();close();render()};
 window.delSrv=id=>{if(confirm('Eliminare questo chierichetto?')){D.servers=D.servers.filter(x=>x.id!==id);D.masses.forEach(m=>{for(const r in m.assign)if(m.assign[r]===id)delete m.assign[r];m.presenti=m.presenti.filter(x=>x!==id);if(m.cer.primo===id)m.cer.primo='';if(m.cer.secondo===id)m.cer.secondo=''});save();render()}};
 V.set=()=>admin?`<h2>Impostazioni</h2><div class="card"><label>Nuovo PIN</label><input id="np" type="password" inputmode="numeric"><button class="p" onclick="if($('#np').value.length>=4){D.pin=$('#np').value;save();alert('PIN cambiato')}else alert('Almeno 4 cifre')">Cambia PIN</button></div>
  <div class="card"><h3>Backup</h3><button class="p" onclick="exp()">⬇️ Esporta JSON</button><label>Importa backup</label><input type="file" accept=".json,application/json" onchange="imp(this.files[0])"></div>
@@ -146,7 +167,7 @@ V.cer=()=>{const cers=D.servers.filter(s=>s.cer);const me=D.me&&sv(D.me);const u
  ${admin?`<br><button class="s" onclick="tab='roster';render()">👥 Gestisci elenco</button><button class="s" onclick="editTpl('feriale')">📋 Modelli scaletta</button>`:''}</div>
  ${me&&me.cer?`<h3>I tuoi prossimi incarichi</h3>${myDuty.map(m=>`<div>• ${fmt(m.data)} ${m.ora} – <b>${roleOf(m,me.id)}</b></div>`).join('')||'<small>Nessun incarico in programma.</small>'}`:`<p><small>${me?'Non sei segnato come cerimoniere.':'Scegli il tuo nome in Home per vedere i tuoi incarichi.'}</small></p>`}
  <h3>Prossime celebrazioni</h3>${u.map(m=>{const c=m.check;const done=c?c.items.filter(i=>i.done).length:0,tot=c?c.items.length:(D.templates[m.tipo]||[]).length;
-  return `<div class="card ${m.tipo}"><b>${fmt(m.data)} · ${m.ora}</b> <span class="badge">${TIPI[m.tipo]}</span><div class="cerline">🎗️ 1°: <b>${esc(m.cer.primo?nm(m.cer.primo):'da assegnare')}</b>${m.cer.secondo?' · 2°: <b>'+esc(nm(m.cer.secondo))+'</b>':''}</div>
+  return `<div class="card ${m.tipo}"><b>${fmt(m.data)} · ${m.ora}</b> <span class="badge">${TIPI[m.tipo]}</span>${sqBadge(m.squadra)}<div class="cerline">🎗️ 1°: <b>${esc(m.cer.primo?nm(m.cer.primo):'da assegnare')}</b>${m.cer.secondo?' · 2°: <b>'+esc(nm(m.cer.secondo))+'</b>':''}</div>
   <div class="prog"><i style="width:${tot?Math.round(done/tot*100):0}%"></i></div><small>Scaletta: ${done}/${tot}</small>
   ${m.noteServ?`<div class="note">📝 ${esc(m.noteServ)}</div>`:''}<button class="p" onclick="openCheck('${m.id}')">📋 Scaletta e note</button></div>`}).join('')||'<p>Nessuna celebrazione in programma.</p>'}`};
 window.openCheck=id=>{const m=D.masses.find(x=>x.id===id);ensureCheck(m);save();drawCheck(m)};
@@ -163,6 +184,23 @@ window.ckAdd=(id)=>{const m=M(id),t=$('#ckt').value.trim();if(!t)return;m.check.
 window.ckReset=id=>{const m=M(id);if(confirm('Sostituire la scaletta con il modello «'+TIPI[m.tipo]+'»?')){m.check=null;ensureCheck(m);save();drawCheck(m)}};
 window.ckNote=id=>{const m=M(id);m.noteServ=$('#ckn').value.trim();save();alert('Note salvate');drawCheck(m)};
 window.editTpl=t=>{modal(`<h2>📋 Modelli scaletta</h2><div class="row">${Object.entries(TIPI).map(([k,v])=>`<button class="${k===t?'p':'s'}" onclick="editTpl('${k}')">${v}</button>`).join('')}</div><p><small>Una voce per riga, nel formato <b>Sezione | voce</b>. Le scalette già create non cambiano.</small></p><textarea id="tpl" rows="14">${esc(D.templates[t].map(x=>x.replace('|',' | ')).join('\n'))}</textarea><button class="p" onclick="D.templates['${t}']=$('#tpl').value.split('\n').map(x=>x.trim()).filter(Boolean);save();alert('Modello salvato')">Salva</button><button class="s" onclick="if(confirm('Ripristinare il modello predefinito?')){D.templates['${t}']=TPL['${t}'].slice();save();editTpl('${t}')}">↺ Predefinito</button><button class="s" onclick="close()">Chiudi</button>`)};
+// ===== Aggiungi mese (responsabile) =====
+window.addMonth=()=>{const d=new Date();d.setMonth(d.getMonth()+1);window._am={mese:d.toISOString().slice(0,7),orari:'Sab 18:00, Dom 10:00, Dom 11:30, Dom 18:00',sel:{}};drawMonth()};
+function monthSpec(){return _am.orari.split(',').map(x=>x.trim().split(/\s+/)).filter(x=>x.length===2)}
+function monthSlots(){const [y,mo]=_am.mese.split('-').map(Number);const spec=monthSpec();const out=[];let w=0;
+ for(let day=1;day<=31;day++){const dt=new Date(y,mo-1,day,12);if(dt.getMonth()!==mo-1)break;if(dt.getDay()!==0)continue;
+  const sun=iso(dt),sat=iso(new Date(y,mo-1,day-1,12));spec.forEach(([g,o],j)=>{const isSat=/^sab/i.test(g);out.push({data:isSat?sat:sun,ora:o,pre:isSat,w,j})});w++}
+ return out}
+function drawMonth(){const sl=monthSlots();const keys=Object.keys(SQ);
+ modal(`<h2>📅 Aggiungi mese</h2><div class="row"><div><label>Mese</label><input type="month" value="${_am.mese}" onchange="_am.mese=this.value;_am.sel={};drawMonth()"></div></div>
+ <label>Orari del fine settimana</label><input value="${esc(_am.orari)}" onchange="_am.orari=this.value;drawMonth()"><small>Formato: «Sab 18:00, Dom 10:00, …» (sabato = prefestiva)</small>
+ <br><button class="s" onclick="rotMonth()">🔄 Riempi a rotazione</button>
+ <table>${sl.map(x=>{const k=x.data+' '+x.ora,ex=D.masses.find(m=>m.data===x.data&&m.ora===x.ora);return `<tr><td>${fmt(x.data)} ${x.ora}${ex?' <small>(esiste)</small>':''}</td><td><select onchange="_am.sel['${k}']=this.value"><option value="">—</option>${keys.map(q=>`<option value="${q}" ${(_am.sel[k]||'')===q?'selected':''}>${SQ[q].n}</option>`).join('')}</select></td></tr>`}).join('')}</table>
+ <button class="p" onclick="saveMonth()">Crea / aggiorna Messe</button><button class="s" onclick="expMonth()">⬇️ Esporta JSON del mese</button><button class="s" onclick="close()">Chiudi</button>`)}
+window.rotMonth=()=>{const base=['blu','verdi','rossi','gialli'];monthSlots().forEach(x=>{_am.sel[x.data+' '+x.ora]=base[(((x.j-x.w)%4)+4)%4]});drawMonth()};
+function monthJson(){return {id:_am.mese,titolo:'Turni '+_am.mese,messe:monthSlots().filter(x=>_am.sel[x.data+' '+x.ora]).map(x=>({data:x.data,ora:x.ora,squadra:_am.sel[x.data+' '+x.ora],tipo:'festiva',note:x.pre?'Prefestiva':''}))}}
+window.saveMonth=()=>{const j=monthJson();let n=0,u=0;j.messe.forEach(x=>{const m=D.masses.find(m=>m.data===x.data&&m.ora===x.ora);if(m){m.squadra=x.squadra;u++}else{D.masses.push({id:uid(),...x,uff:true,uffSrc:'manuale-'+j.id,assign:{},presenti:[],cer:{primo:'',secondo:''},check:null,noteServ:''});n++}});save();alert(`Create ${n} Messe, aggiornate ${u}.`);close();render()};
+window.expMonth=()=>{const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify(monthJson(),null,1)],{type:'application/json'}));a.download=_am.mese+'.json';a.click()};
 V.form=()=>`<h2>Formazione 📖</h2>${Object.entries(G).map(([t,h])=>`<details class="card"><summary><b>${t}</b></summary>${h}</details>`).join('')}`;
 render();
 if(!window.Capacitor&&'serviceWorker' in navigator&&location.protocol.startsWith('http'))navigator.serviceWorker.register('sw.js').catch(()=>{});
